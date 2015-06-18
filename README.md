@@ -40,6 +40,9 @@ Pkg.checkout("MeshIO", "master")
 Pkg.clone("https://github.com/jhasse/FreeType.jl")
 Pkg.checkout("FreeType", "master")
 
+Pkg.clone("https://github.com/JuliaIO/Toxcore.jl")
+Pkg.checkout("Toxcore", "master")
+
 Pkg.clone("https://github.com/SimonDanisch/FreeTypeAbstraction.jl")
 Pkg.checkout("FreeTypeAbstraction", "master")
 
@@ -68,6 +71,7 @@ Pkg.checkout("Compat", "master")
 Pkg.add("Meshes")
 Pkg.checkout("Meshes", "meshes2.0")
 
-
+Pkg.clone("https://github.com/SimonDanisch/Osmosis.jl")
+Pkg.checkout("Osmosis")
 
 ```
