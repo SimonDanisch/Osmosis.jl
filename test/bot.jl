@@ -7,9 +7,18 @@ using GLAbstraction
 using ColorTypes
 using FileIO
 using ImageIO
+using MeshIO
+using WavefrontObj
+using Meshes
 
 include("helper.jl")
-
+function xy_data(x,y,i, N)
+    x = ((x/N)-0.5f0)*i
+    y = ((y/N)-0.5f0)*i
+    r = sqrt(x*x + y*y)
+    Float32(sin(r)/r)
+end
+generate(i, N) = Float32[xy_data(Float32(x),Float32(y),Float32(i), N) for x=1:N, y=1:N]
 type JuliaBot
     quit::Bool
     svg_file_bytes::Vector{Uint8}
@@ -21,45 +30,87 @@ end
 
 bot = JuliaBot()
 
+const RS = GLVisualize.ROOT_SCREEN
 
-const RS    = GLVisualize.ROOT_SCREEN
-
-function message_area(yoffset, y, m_area, screen_height, offset)
-    Rectangle(offset[1], yoffset+(round(Int, y)*50), m_area.w-offset[2], screen_height)
-end
 
 immutable Message
-    offset::NTuple{2, Int}
+    leftaligned::Bool # kinda silly place, but it works for now
     color::RGBA{Float32}
     text::UTF8String
 end
-global const MESSAGES = Input(Message((50, 200), RGBA(1f0,0.2f0,0.5f0,0.7f0), "msg"))
+global const MESSAGES = Input(Message(false, RGBA(1f0,0.2f0,0.5f0,0.7f0), "msg"))
 
-function handle_message(yoffset, message, scroll_window, main_screen)
-    text = message.text
-    yoffset -= 30
-    if startswith(text, "jl\"") && endswith(text, "\"")
-        value           = save_eval(text[4:end-1])
-        try 
-            robj = visualize(value)
-        catch e # ultra terrible way of trying to find out if there is a default visulization
-            robj = visualize(string(value))
+
+function message_area(yoffset, y_scroll, m_area, screen_width, screen_height, left_aligned)
+    yposition    = yoffset+(round(Int, y_scroll)*50) # for scrolling and positioning
+    xposition    = left_aligned ? 50 : (m_area.w - 50 - screen_width)
+    Rectangle(xposition, yposition, screen_width, screen_height)
+end
+
+function create_screens(yoffset, robjs_alignment, scroll_window, main_screen)
+    frame = 80
+    robjs, alignement, color = robjs_alignment
+    for robj in robjs
+        yoffset -= 30
+        camera_position = Vec3(2)
+        camera_lookat   = Vec3(0)
+        boundingbox     = robj.boundingbox.value
+        bbsize          = boundingbox.max - boundingbox.min
+        if endswith(string(robj[:preferred_camera]), "_pixel") # terrible way of working around the lack of a unit system
+            screen_height           = round(Int, bbsize.y)+frame
+            screen_width            = round(Int, bbsize.x)+frame
+            move                    = -boundingbox.min+Float32(frame/2f0)
+            robj[:model]            = translationmatrix(Vec3(move.x, move.y, 0f0))
+            robj[:preferred_camera] = :fixed_pixel #better fixate this
+        else
+            screen_height     = 700 # for now, all 3D windows will have a fixed size
+            screen_width      = lift(x->round(Int, x.w*0.9), main_screen.area)
+            camera_position   = boundingbox.min+(bbsize*1.5f0)
+            camera_lookat     = boundingbox.min+(bbsize*0.5f0)
         end
-        screen_height   = 600
-    else
-        robj            = visualize(text, preferred_camera=:fixed_pixel)
-        bb              = robj.boundingbox.value
-        width           = bb.max - bb.min
-        text_height     = round(Int, width.y)
-        robj[:model]    = translationmatrix(Vec3(20, text_height+40, 0))
-        screen_height   = text_height+100
+        yoffset     -= screen_height
+        area        = lift(message_area, yoffset, scroll_window, main_screen.area, screen_width, screen_height, alignement)
+        new_screen  = Screen(main_screen, area=area, position=camera_position, lookat=camera_lookat)
+        view(
+            visualize(lift(zeroposition, area), color=color), 
+            new_screen, method=:fixed_pixel
+        )
+        view(robj, new_screen)
     end
-    yoffset     -= screen_height
-    area        = lift(message_area, yoffset, scroll_window, main_screen.area, screen_height, message.offset)
-    new_screen  = Screen(main_screen, area=area)
-    view(visualize(lift(zeroposition, area), color=message.color), new_screen, method=:fixed_pixel)
-    view(robj, new_screen)
     yoffset
+end
+
+function handle_drop(files::Vector{UTF8String})
+    files = map(File, files)
+    (RenderObject[visualize(f) for f in files], false, RGBA(1f0,1f0,1f0,0.7f0))
+end
+
+function visualize_source(source)
+    value = save_eval(source)
+    if isa(value, RenderObject)
+        return value
+    else
+        try
+            return visualize(value)
+        catch e # ultra terrible way of trying to find out if there is a default visulization
+            return visualize("error: $e", preferred_camera=:fixed_pixel)
+        end
+    end
+end
+
+function GLVisualize.visualize(julia_source::File{:jl})
+    source = readall(abspath(julia_source))
+    visualize_source(source)
+end
+function visualize_message(msg::Message)
+    text = msg.text
+    vizz = "error"
+    if startswith(text, "jl\"") && endswith(text, "\"") # its julia code
+        vizz = visualize_source(text[4:end-1])
+    else # its just text
+        vizz = visualize(text, preferred_camera=:fixed_pixel)
+    end 
+    return ([vizz], msg.leftaligned, msg.color) # this is what the insertinto screen function wants!
 end
 
 
@@ -69,8 +120,8 @@ function main()
     info("This is the Julia Tox bot")
 
     # Load the file that the bot always sends
-    julia_svg_file = open(Pkg.dir("Toxcore", "test/julia.svg"), "r") 
-    bot.svg_file_bytes = readbytes(julia_svg_file)
+    julia_svg_file      = open(Pkg.dir("Toxcore", "test/julia.svg"), "r") 
+    bot.svg_file_bytes  = readbytes(julia_svg_file)
     close(julia_svg_file)
 
     # Try to load the tox settings
@@ -115,8 +166,8 @@ function main()
     println(convert(ASCIIString, tox_self_get_address(my_tox)))
 
     # define user details
-	tox_self_set_name(my_tox, "Julia")
-    tox_self_set_status_message(my_tox, "I am Julia, a high-level, high-performance dynamic programming language for technical computing.") 
+	tox_self_set_name(my_tox, "SamD")
+    tox_self_set_status_message(my_tox, "Whatup yo!") 
     Toxcore.CInterface.tox_self_set_status(my_tox, Toxcore.CInterface.TOX_USER_STATUS_NONE) 
     # bootstrap from the node defined above 
     if !tox_bootstrap(my_tox)
@@ -135,6 +186,7 @@ function main()
     end
     println(currentfriend)
     println(tox_friend_get_name(my_tox, currentfriend))
+
     write_area, main_area   = y_partition(RS.area, 20.0)
     write_screen            = Screen(RS, area=write_area)
     main_screen             = Screen(RS, area=main_area)
@@ -146,7 +198,7 @@ function main()
     message         = sampleon(keepwhen(enter_pressed, true, enter_pressed), text_sig)
     mymessages      = lift(message) do msg
         tox_friend_send_message(my_tox, currentfriend, msg)
-        Message((150, 200), RGBA(1f0,1f0,1f0,0.7f0), msg)
+        Message(false, RGBA(1f0,1f0,1f0,0.7f0), msg)
     end
 
     view(background,    write_screen)
@@ -156,12 +208,20 @@ function main()
     view(visualize(lift(x->Rectangle(0,0,x.w, x.h), write_screen.area), color=RGBA(0f0,0f0,0f0,0.7f0)), write_screen, method=:fixed_pixel)
 
     scroll_window = foldl(+, 0.0, keepwhen(main_screen.inputs[:mouseinside], 0.0, main_screen.inputs[:scroll_y]))
-    ALLMESS = merge(mymessages, MESSAGES)
-    foldl(handle_message, write_area.value.h, 
-        ALLMESS, Input(scroll_window), 
-        Input(main_screen)
-    )
+    
+    drop_robjs = lift(handle_drop, RS.inputs[:droppedfiles])
 
+    all_msgs     = merge(mymessages, MESSAGES)
+
+    msg_robj    = lift(visualize_message, all_msgs)
+    all_robjs   = merge(msg_robj, drop_robjs)
+
+    foldl(
+        create_screens,
+        write_area.value.h, 
+        all_robjs, 
+        Input(scroll_window), Input(main_screen)
+    )
     toxloop(my_tox, RS)
 
 end

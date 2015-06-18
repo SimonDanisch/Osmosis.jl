@@ -23,9 +23,6 @@ function parse_multi(source)
     i = start(str)
     exprs = []
     while !done(str, i)
-        if str[i] == '#' 
-            println("this is a comment, $i")
-        end
         ex, i = parse(str, i, raise=false)
         push!(exprs, ex)
     end
@@ -60,6 +57,6 @@ end
 function OnToxFriendMessage(tox::Ptr{Tox}, friend_number::Uint32, typ::TOX_MESSAGE_TYPE, message::Ptr{Uint8}, message_length::Csize_t, user_data::Ptr{Void})
     global MESSAGES
     msg = utf8(message, message_length)
-    push!(MESSAGES, Message((50, 200), RGBA(1f0,0.2f0,0.5f0,0.7f0), msg))
+    push!(MESSAGES, Message(true, RGBA(1f0,0.2f0,0.5f0,0.7f0), msg))
     nothing
 end
