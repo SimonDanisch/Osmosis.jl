@@ -33,20 +33,21 @@ function save_eval(source)
     exprsns = parse_multi(source)
     last_val = "empty"
     for expr in exprsns
-        if expr.head != :error
-            try
-                last_val = eval(Main, expr)
-            catch e
-                last_val = string(e)
+        if isa(expr, Expr)
+            if expr.head != :error
+                try
+                    last_val = eval(Main, expr)
+                catch e
+                    last_val = string(e)
+                end
+            else
+                last_val = string(expr)
             end
-        else
-            last_val = string(expr)
         end
     end
     return last_val
 end
 println("4")
-zeroposition{T}(r::Rectangle{T}) = Rectangle(zero(T), zero(T), r.w, r.h)
 
 
 function OnToxFriendRequest(tox::Ptr{Tox}, public_key::Ptr{Uint8}, message::Ptr{Uint8}, length::Csize_t, user_data::Ptr{Void})

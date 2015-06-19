@@ -10,6 +10,7 @@ using ImageIO
 using MeshIO
 using WavefrontObj
 using Meshes
+using NPZ
 
 include("helper.jl")
 function xy_data(x,y,i, N)
@@ -19,6 +20,8 @@ function xy_data(x,y,i, N)
     Float32(sin(r)/r)
 end
 generate(i, N) = Float32[xy_data(Float32(x),Float32(y),Float32(i), N) for x=1:N, y=1:N]
+
+
 type JuliaBot
     quit::Bool
     svg_file_bytes::Vector{Uint8}
@@ -48,7 +51,7 @@ function message_area(yoffset, y_scroll, m_area, screen_width, screen_height, le
 end
 
 function create_screens(yoffset, robjs_alignment, scroll_window, main_screen)
-    frame = 80
+    frame = 50
     robjs, alignement, color = robjs_alignment
     for robj in robjs
         yoffset -= 30
@@ -63,7 +66,7 @@ function create_screens(yoffset, robjs_alignment, scroll_window, main_screen)
             robj[:model]            = translationmatrix(Vec3(move.x, move.y, 0f0))
             robj[:preferred_camera] = :fixed_pixel #better fixate this
         else
-            screen_height     = 700 # for now, all 3D windows will have a fixed size
+            screen_height     = 600 # for now, all 3D windows will have a fixed size
             screen_width      = lift(x->round(Int, x.w*0.9), main_screen.area)
             camera_position   = boundingbox.min+(bbsize*1.5f0)
             camera_lookat     = boundingbox.min+(bbsize*0.5f0)
@@ -102,6 +105,14 @@ function GLVisualize.visualize(julia_source::File{:jl})
     source = readall(abspath(julia_source))
     visualize_source(source)
 end
+function GLVisualize.visualize(npzfile::File{:npz}, style::Symbol=:default; kw_args...)
+    volume = npzread(abspath(npzfile))["data"]
+    volume = volume./256f0
+    visualize(volume, Style{style}(), visualize_default(volume, style, kw_args))
+end
+
+
+
 function visualize_message(msg::Message)
     text = msg.text
     vizz = "error"
