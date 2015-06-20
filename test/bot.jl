@@ -13,12 +13,14 @@ using Meshes
 using NPZ
 
 include("helper.jl")
+
 function xy_data(x,y,i, N)
     x = ((x/N)-0.5f0)*i
     y = ((y/N)-0.5f0)*i
     r = sqrt(x*x + y*y)
     Float32(sin(r)/r)
 end
+
 generate(i, N) = Float32[xy_data(Float32(x),Float32(y),Float32(i), N) for x=1:N, y=1:N]
 
 
@@ -27,11 +29,6 @@ type JuliaBot
     svg_file_bytes::Vector{Uint8}
 end
 
-function JuliaBot()
-    JuliaBot(false, [])
-end
-
-bot = JuliaBot()
 
 const RS = GLVisualize.ROOT_SCREEN
 
@@ -130,41 +127,14 @@ function main()
 
     info("This is the Julia Tox bot")
 
-    # Load the file that the bot always sends
-    julia_svg_file      = open(Pkg.dir("Toxcore", "test/julia.svg"), "r") 
-    bot.svg_file_bytes  = readbytes(julia_svg_file)
-    close(julia_svg_file)
-
-    # Try to load the tox settings
     my_tox = 0
 
-    try 
-        savefile = open(Pkg.dir("Toxcore", "test", "bot_savedata.binary"), "r")
-        savedata = readbytes(savefile)
-        close(savefile)
-
-        default_options = tox_options_default()
-
-        options = Tox_Options(default_options.ipv6_enabled,
-                            default_options.udp_enabled,
-                            default_options.proxy_type,
-                            default_options.proxy_host,
-                            default_options.proxy_port,
-                            default_options.start_port,
-                            default_options.end_port,
-                            default_options.tcp_port,
-                            TOX_SAVEDATA_TYPE_TOX_SAVE,
-                            pointer(savedata),
-                            length(savedata))
-
-        my_tox = tox_new(options)
-
+    toxdata = Pkg.dir("Toxcore", "test", "bot_savedata.binary")
+    if isfile(toxdata)
+        my_tox = Tox(toxdata)
         info("Previous bot instance found. Reusing it!")
-    catch e 
-        println(e)
-        #Create a default Tox
-        my_tox = tox_new()
-
+    else
+        my_tox = Tox()
         info("Created new bot instance")
     end
 
@@ -189,11 +159,11 @@ function main()
     # get the friend list
     friendlist = tox_self_get_friend_list(my_tox)
     info("I have $(length(friendlist)) friend(s)")
-    currentfriend = 0
+    currentfriend = UInt32(0)
     for friend in friendlist
         fname = tox_friend_get_name(my_tox, friend) 
         println(fname)
-        fname == "SimonD" && (currentfriend = friend)
+        fname == "Simonium" && (currentfriend = friend)
     end
     println(currentfriend)
     println(tox_friend_get_name(my_tox, currentfriend))
