@@ -124,7 +124,7 @@ function create_edit_screen(parent, robj, namefilter=edit_value_names)
 end
 
 function create_screens(yoffset, robjs_alignment, scroll_window, main_screen)
-    frame = 30
+    frame = 40
     robjs, alignement, color = robjs_alignment
     for robj in robjs
         yoffset -= 30
@@ -281,11 +281,12 @@ function main()
         Message(false, RGBA(1f0,1f0,1f0,0.7f0), msg)
     end
 
+    view(visualize(lift(x->Rectangle(0,0,x.w, x.h), write_screen.area), color=RGBA(0f0,0f0,0f0,0.7f0)), write_screen, method=:fixed_pixel)
+
     view(background,    write_screen)
     view(text,          write_screen)
     view(cursor_robj,   write_screen)
 
-    view(visualize(lift(x->Rectangle(0,0,x.w, x.h), write_screen.area), color=RGBA(0f0,0f0,0f0,0.7f0)), write_screen, method=:fixed_pixel)
 
     scroll_window   = foldl(+, 0.0, keepwhen(main_screen.inputs[:mouseinside], 0.0, main_screen.inputs[:scroll_y]))
     
