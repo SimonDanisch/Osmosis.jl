@@ -12,6 +12,7 @@ using WavefrontObj
 using Meshes
 using NPZ
 using GLFW
+using ModernGL
 
 include("helper.jl")
 function xy_data(x,y,i, N)
@@ -22,19 +23,6 @@ function xy_data(x,y,i, N)
 end
 generate(i, N) = Float32[xy_data(Float32(x),Float32(y),Float32(i), N) for x=1:N, y=1:N]
 
-
-type JuliaBot
-    quit::Bool
-    svg_file_bytes::Vector{Uint8}
-end
-
-function JuliaBot()
-    JuliaBot(false, [])
-end
-
-bot = JuliaBot()
-
-const RS = GLVisualize.ROOT_SCREEN
 
 
 immutable Message
@@ -50,7 +38,7 @@ function message_area(yoffset, y_scroll, m_area, screen_width, screen_height, le
     xposition    = left_aligned ? 50 : (m_area.w - 50 - screen_width)
     Rectangle(xposition, yposition, screen_width, screen_height)
 end
-const edit_value_names = [
+const edit_value_names = (
     :color,
     :grid_min,
     :grid_max,
@@ -62,7 +50,7 @@ const edit_value_names = [
     :absorption,
     :light_position,
     :isovalue
-]
+)
 
 is_screen_active(v0, ek, esc) = (esc && return false; ek && return true; v0)
 
@@ -82,20 +70,20 @@ function create_edit_screen(parent, robj, namefilter=edit_value_names)
 
 
             boundingbox      = keylabel.boundingbox.value
-            bbsize           = boundingbox.max - boundingbox.min
-            key_height       = round(Int, bbsize.y)
-            key_width        = round(Int, bbsize.x)
-            move             = -boundingbox.min+Float32(frame/2f0)+Vec3(0, yoffset, 0)
-            keylabel[:model] = translationmatrix(Vec3(move.x, move.y, 0f0))
+            bbsize           = boundingbox.maximum - boundingbox.minimum
+            key_width        = round(Int, bbsize[1])
+            key_height       = round(Int, bbsize[2])
+            move             = -boundingbox.minimum+Float32(frame/2f0)+Vec3f0(0, yoffset, 0)
+            keylabel[:model] = translationmatrix(Vec3f0(move[1], move[2], 0f0))
             keylabel[:preferred_camera] = :fixed_pixel
 
             boundingbox      = editvizz.boundingbox.value
-            bbsize           = boundingbox.max - boundingbox.min
-            edit_height      = round(Int, bbsize.y)
-            edit_width       = round(Int, bbsize.x)
-            move             = -boundingbox.min+Float32(frame/2f0)+Vec3(key_width, yoffset, 0)
-            editvizz[:model] = translationmatrix(Vec3(move.x, move.y, 0f0))
-            editvizz[:preferred_camera] = :fixed_pixel 
+            bbsize           = boundingbox.maximum - boundingbox.minimum
+            edit_width       = round(Int, bbsize[1])
+            edit_height      = round(Int, bbsize[2])
+            move             = -boundingbox.minimum+Float32(frame/2f0)+Vec3f0(key_width, yoffset, 0)
+            editvizz[:model] = translationmatrix(Vec3f0(move[1], move[2], 0f0))
+            editvizz[:preferred_camera] = :fixed_pixel
             push!(vizzes, editvizz, keylabel)
 
             yoffset         += max(edit_height, key_height)+50
@@ -105,21 +93,21 @@ function create_edit_screen(parent, robj, namefilter=edit_value_names)
 
     buttonspressed  = parent.inputs[:buttonspressed]
 
-    edit_key            = lift(==, buttonspressed, IntSet(GLFW.KEY_LEFT_CONTROL, GLFW.KEY_E))
-    escape_key          = lift(==, buttonspressed, IntSet(GLFW.KEY_ESCAPE))
+    edit_key            = lift(==, buttonspressed, [GLFW.KEY_LEFT_CONTROL, GLFW.KEY_E])
+    escape_key          = lift(==, buttonspressed, [GLFW.KEY_ESCAPE])
     edit_key_active     = keepwhen(edit_key, false, edit_key)
 
     mouse_at_edit_time  = sampleon(edit_key_active, parent.inputs[:mouseposition])
     is_active           = foldl(is_screen_active, false, edit_key, escape_key)
     area                = lift(mouse_at_edit_time, is_active) do mousepos, active
         !active && return Rectangle(0,0,0,0)
-        Rectangle(round(Int, mousepos.x), round(Int, mousepos.y), max_screenwidth+frame, yoffset)
+        Rectangle(round(Int, mousepos[1]), round(Int, mousepos[2]), max_screenwidth+frame, yoffset)
     end
     edit_screen         = Screen(parent, area=area)
     view(
-            visualize(lift(zeroposition, area), color=RGBA(0f0,0f0,0f0,1f0)),
-            edit_screen, method=:fixed_pixel
-        )
+        visualize(lift(zeroposition, area), color=RGBA(0f0,0f0,0f0,1f0)),
+        edit_screen, method=:fixed_pixel
+    )
     view(vizzes, edit_screen)
 end
 
@@ -128,32 +116,31 @@ function create_screens(yoffset, robjs_alignment, scroll_window, main_screen)
     robjs, alignement, color = robjs_alignment
     for robj in robjs
         yoffset -= 30
-        camera_position = Vec3(2)
-        camera_lookat   = Vec3(0)
+        camera_position = Vec3f0(2)
+        camera_lookat   = Vec3f0(0)
         boundingbox     = robj.boundingbox.value
-        bbsize          = boundingbox.max - boundingbox.min
+        bbsize          = boundingbox.maximum - boundingbox.minimum
         if endswith(string(robj[:preferred_camera]), "_pixel") # terrible way of working around the lack of a unit system
-            screen_height           = round(Int, bbsize.y)+frame
-            screen_width            = round(Int, bbsize.x)+frame
-            move                    = -boundingbox.min+Float32(frame/2f0)
-            robj[:model]            = translationmatrix(Vec3(move.x, move.y, 0f0))
+            screen_height           = round(Int, bbsize[2])+frame
+            screen_width            = round(Int, bbsize[1])+frame
+            move                    = -boundingbox.minimum+Float32(frame/2f0)
+            robj[:model]            = translationmatrix(Vec3f0(move[1], move[2], 0f0))
             robj[:preferred_camera] = :fixed_pixel #better fixate this
         else
             screen_height     = 700 # for now, all 3D windows will have a fixed size
             screen_width      = lift(x->round(Int, x.w*0.9), main_screen.area)
-            camera_position   = boundingbox.min+(bbsize*1.5f0)
-            camera_lookat     = boundingbox.min+(bbsize*0.5f0)
+            camera_position   = boundingbox.minimum+(bbsize*1.5f0)
+            camera_lookat     = boundingbox.minimum+(bbsize*0.5f0)
         end
         yoffset     -= screen_height
         area        = lift(message_area, yoffset, scroll_window, main_screen.area, screen_width, screen_height, alignement)
         new_screen  = Screen(main_screen, area=area, position=camera_position, lookat=camera_lookat)
-        edit_screen = 
-        view(
-            visualize(lift(zeroposition, area), color=color),
-            new_screen, method=:fixed_pixel
-        )
+        #view(
+        #    visualize(lift(zeroposition, area), color=color),
+        #    new_screen, method=:fixed_pixel
+        #)
         view(robj, new_screen)
-        create_edit_screen(new_screen, robj)
+        #create_edit_screen(new_screen, robj)
     end
     yoffset
 end
@@ -196,16 +183,17 @@ function visualize_message(msg::Message)
         vizz = visualize_source(text[4:end-1])
     else # its just text
         vizz = visualize(text, preferred_camera=:fixed_pixel)
-    end 
+    end
     return ([vizz], msg.leftaligned, msg.color) # this is what the insertinto screen function wants!
 end
 
 
 function main()
+    RS, renderloop = Screen()
     # Try to load the tox settings
     my_tox = 0
 
-    try 
+    try
         savefile = open(Pkg.dir("Toxcore", "test", "bot_savedata.binary"), "r")
         savedata = readbytes(savefile)
         close(savefile)
@@ -227,14 +215,14 @@ function main()
         my_tox = tox_new(options)
 
         info("Previous bot instance found. Reusing it!")
-    catch e 
+    catch e
         println(e)
         #Create a default Tox
         my_tox = tox_new()
         info("Created new bot instance")
     end
 
-    # register the callbacks 
+    # register the callbacks
     tox_callback_friend_request(my_tox, OnToxFriendRequest, C_NULL)
     tox_callback_friend_message(my_tox, OnToxFriendMessage, C_NULL)
 
@@ -244,20 +232,20 @@ function main()
 
     # define user details
 	tox_self_set_name(my_tox, "SamD")
-    tox_self_set_status_message(my_tox, "Whatup yo!") 
-    Toxcore.CInterface.tox_self_set_status(my_tox, Toxcore.CInterface.TOX_USER_STATUS_NONE) 
-    # bootstrap from the node defined above 
+    tox_self_set_status_message(my_tox, "Whatup yo!")
+    Toxcore.CInterface.tox_self_set_status(my_tox, Toxcore.CInterface.TOX_USER_STATUS_NONE)
+    # bootstrap from the node defined above
     if !tox_bootstrap(my_tox)
         println("Failed to bootstrap.")
         exit()
-    end 
+    end
 
     # get the friend list
     friendlist = tox_self_get_friend_list(my_tox)
     info("I have $(length(friendlist)) friend(s)")
     currentfriend = 0
     for friend in friendlist
-        fname = tox_friend_get_name(my_tox, friend) 
+        fname = tox_friend_get_name(my_tox, friend)
         println(fname)
         fname == "SimonD" && (currentfriend = friend)
     end
@@ -268,10 +256,10 @@ function main()
     write_screen            = Screen(RS, area=write_area)
     main_screen             = Screen(RS, area=main_area)
 
-    text = visualize("write something \n", model=translationmatrix(Vec3(0,write_area.value.h-40,0)))
+    text = visualize("write something \n", model=translationmatrix(Vec3f0(0, write_area.value.h-40,0)))
     background, cursor_robj, text_sig = vizzedit(text[:glyphs], text, write_screen.inputs)
     buttonspressed  = write_screen.inputs[:buttonspressed]
-    enter_pressed   = lift(==, buttonspressed, IntSet(GLFW.KEY_ENTER))
+    enter_pressed   = lift(==, buttonspressed, [GLFW.KEY_ENTER])
     system_message  = Input(utf8("jl\"file\"osmosisheader.png\"\""))
     message         = sampleon(keepwhen(enter_pressed, true, enter_pressed), text_sig)
     message         = merge(system_message, message)
@@ -289,7 +277,7 @@ function main()
 
 
     scroll_window   = foldl(+, 0.0, keepwhen(main_screen.inputs[:mouseinside], 0.0, main_screen.inputs[:scroll_y]))
-    
+
     drop_robjs      = lift(handle_drop, RS.inputs[:droppedfiles])
 
     all_msgs        = merge(mymessages, MESSAGES)
@@ -299,22 +287,15 @@ function main()
 
     foldl(
         create_screens,
-        main_area.value.h, 
-        all_robjs, 
+        main_area.value.h,
+        all_robjs,
         Input(scroll_window), Input(main_screen)
     )
     push!(system_message, utf8("jl\"file\"osmosisheader.png\"\""))
 
-    toxloop(my_tox, RS)
+    glClearColor(1,1,1,1)
+    renderloop(()-> tox_iterate(my_tox))
 
-end
-function toxloop(my_tox, screen)
-    while screen.inputs[:open].value
-        renderloop(screen)
-        tox_iterate(my_tox)
-    end
-    GLFW.Terminate()
-    GLVisualize.FreeTypeAbstraction.done()
     savedata = tox_get_savedata(my_tox)
     tox_kill(my_tox)
 
@@ -323,7 +304,7 @@ function toxloop(my_tox, screen)
     close(savefile)
 
     info("Bot instance saved")
+
 end
-println("22")
+
 main()
-println("7")
