@@ -243,11 +243,11 @@ function main()
     # get the friend list
     friendlist = tox_self_get_friend_list(my_tox)
     info("I have $(length(friendlist)) friend(s)")
-    currentfriend = 0
+    currentfriend = Cuint(0)
     for friend in friendlist
         fname = tox_friend_get_name(my_tox, friend)
         println(fname)
-        fname == "SimonD" && (currentfriend = friend)
+        fname == "SimonD" && (currentfriend = Cuint(friend))
     end
     println(currentfriend)
     println(tox_friend_get_name(my_tox, currentfriend))
